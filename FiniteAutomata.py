@@ -32,3 +32,25 @@ class FA:
             self.transitions[fromstate][tostate].union(inputch)
         else:
             self.transitions[fromstate][tostate] = inputch
+
+    def displaySquare(self, fname, pname, pst):
+        fa = Digraph(pname, filename = fname, format = 'png')
+        fa.attr(rankdir='LR')
+
+        fa.attr('node', shape = 'record')
+        for fromstate, tostates in self.transitions.items():
+            for state in tostates:
+                fromstr = 'I' + str(fromstate) + ': '
+                for pj in pst[fromstate]:
+                    fromstr += pj[0] + arrow + pj[1] + '\\n'
+                tostr = 'I' + str(state) + ': '
+                for pj in pst[state]:
+                    tostr += pj[0] + arrow + pj[1] + '\\n'
+                fa.node('I' + str(fromstate), label = fromstr)
+                fa.node('I' + str(state), label = tostr)
+                fa.edge('I' + str(fromstate), 'I' + str(state), label = list(tostates[state])[0])
+
+        fa.attr('node', shape = 'point')
+        fa.edge('', 'I0')
+
+        fa.view()

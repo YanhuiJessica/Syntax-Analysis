@@ -63,3 +63,71 @@ class LR:
                 tmp += s
                 self.dfa.addSymbol(s)
             self.addProjects(fromexp, tmp)
+
+    def getClosure(self, fromexp):
+        pst = set()
+        for toexp in self.projects[fromexp]:
+            if toexp.find(dot) == 0:
+                pst.add((fromexp, toexp))
+        return pst
+
+    def getProjectSet(self, pst):   # 获得整个项目集
+        vis = set()
+        while len(vis) != len(pst):
+            for pj in pst:
+                if pj in vis:
+                    continue
+                vis.add(pj)
+                nxtpos = pj[1].find(dot) + 1
+                if nxtpos == len(pj[1]) or pj[1][nxtpos] not in Upper:
+                    continue
+                pst = pst.union(self.getClosure(pj[1][nxtpos]))
+        return pst
+
+     def getNxtStateId(self, fromst, sy): # get next project set id 根据当前项目集编号和获得符号获得下一个项目集编号
+        if fromst not in self.sy2stat or sy not in self.sy2stat[fromst]:
+            self.projectset_num += 1
+            self.sy2stat[fromst][sy] = self.projectset_num
+            stnum = self.projectset_num
+        else:
+            return self.sy2stat[fromst][sy], False
+        return stnum, True
+
+    def addProjectSet(self, Iid, project):
+        if isinstance(project, tuple):
+            project = set([project])
+        if Iid in self.projectSet:
+            self.projectSet[Iid] = self.projectSet[Iid].union(project)
+        else:
+            self.projectSet[Iid] = project
+
+    def BuildSimpleDFA(self):   # do not contain lookahead terminals
+        self.sy2stat = defaultdict(defaultdict) # sy2stat[next_project_set_i_id][get_one_symbol] = next_project_set_j_id
+        self.projectset_num = 0
+        self.dfa.setStart(0)
+        q = [0]
+        while len(q):
+            Iid = q.pop()
+            self.projectSet[Iid] = self.getProjectSet(self.projectSet[Iid])
+            tmpdict = dict()    # get one symbol and move to next project set, tmpdict[symbol] = next_project_set
+            for pj in self.projectSet[Iid]:
+                nxtpos = pj[1].find(dot) + 1
+                if nxtpos == len(pj[1]):
+                    continue
+                nxtsy = pj[1][nxtpos]
+                nxtpj = pj[1][:nxtpos - 1] + nxtsy + dot + pj[1][nxtpos + 1: ]  # moving dot behind next symbol 将·后移一个符号
+                if nxtsy in tmpdict:
+                    tmpdict[nxtsy].add((pj[0], nxtpj))
+                else:
+                    tmpdict[nxtsy] = set([(pj[0], nxtpj)])
+
+            for nxtsy in tmpdict:
+                tmpdict[nxtsy] = self.getProjectSet(tmpdict[nxtsy])
+                if tmpdict[nxtsy] in self.projectSet.values():
+                    self.sy2stat[Iid][nxtsy] = list(self.projectSet.keys())[list(self.projectSet.values()).index(tmpdict[nxtsy])]
+                    continue
+                nxtIid, flag = self.getNxtStateId(Iid, nxtsy)
+                if flag:
+                    q.append(nxtIid)
+                self.addProjectSet(nxtIid, tmpdict[nxtsy])
+                self.dfa.addTransition(Iid, nxtIid, nxtsy)
