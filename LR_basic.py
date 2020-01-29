@@ -131,3 +131,75 @@ class LR:
                     q.append(nxtIid)
                 self.addProjectSet(nxtIid, tmpdict[nxtsy])
                 self.dfa.addTransition(Iid, nxtIid, nxtsy)
+
+    def addAction(self, stateid, sy, operation):
+        if isinstance(operation, str):
+            operation = set([operation])
+        if stateid in self.action and sy in self.action[stateid]:
+            self.action[stateid][sy] = self.action[stateid][sy].union(operation)
+        else:
+            self.action[stateid][sy] = operation
+
+    def addGoto(self, stateid, sy, operation):
+        if isinstance(operation, int):
+            operation = set([operation])
+        if stateid in self.goto and sy in self.goto[stateid]:
+            self.goto[stateid][sy] = self.goto[stateid][sy].union(operation)
+        else:
+            self.goto[stateid][sy] = operation
+
+    def BuildLR0AnalyseTable(self):
+        self.action = defaultdict(defaultdict)
+        self.goto = defaultdict(defaultdict)
+        for Iid in self.projectSet:
+            for pj in self.projectSet[Iid]:
+                nxtpos = pj[1].find(dot) + 1
+                if nxtpos == len(pj[1]):
+                    if self.projects[pj[0]][pj[1]] == 2:
+                        self.addAction(Iid, '#', 'acc')
+                    else:
+                        op = 'r' + str(self.production_numdict[pj[0]][pj[1]])
+                    if self.production_numdict[pj[0]][pj[1]] == 0:
+                        continue
+                    self.addAction(Iid, '#', op)
+                    for sy in self.dfa.symbol:
+                        self.addAction(Iid, sy, op)
+                    continue
+                nxtsy = pj[1][nxtpos]
+                op = 'S' + str(self.GO(Iid, nxtsy))
+                if nxtsy not in Bigen:
+                    self.addAction(Iid, nxtsy, op)
+                else:
+                    self.addGoto(Iid, nxtsy, int(op[1:]))
+
+        for stat in self.action:
+            for sy in self.action[stat]:
+                if len(self.action[stat][sy]) > 1:
+                    print("It's not a LR(0) grammer.")
+                    return False
+        print("It's a LR(0) grammer.")
+        return True
+
+    def Analysis(self, sentence):
+        statstack = [0] # 状态栈
+        systack = ['#'] # 符号栈
+        inpstack = '#' + sentence[::-1]
+        while True:
+            curstate = statstack[-1]
+            cursy = inpstack[-1]
+            if cursy not in self.action[curstate]:
+                return False
+            op = list(self.action[curstate][cursy])[0]
+            if op[0] == 'S':
+                systack.append(inpstack[-1])
+                inpstack = inpstack[:-1]
+                statstack.append(int(op[1:]))
+            elif op[0] == 'r':
+                production = self.production[int(op[1:])]
+                opnum = len(production[1])
+                statstack = statstack[:-opnum]
+                systack = systack[:-opnum]
+                statstack.append(list(self.goto[statstack[-1]][production[0]])[0])
+                systack.append(production[0])
+            elif op == 'acc':
+                return True
