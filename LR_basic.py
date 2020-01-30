@@ -148,6 +148,9 @@ class LR:
         else:
             self.goto[stateid][sy] = operation
 
+    def GO(self, state, sy):
+        return self.sy2stat[state][sy]
+
     def BuildLR0AnalyseTable(self):
         self.action = defaultdict(defaultdict)
         self.goto = defaultdict(defaultdict)
@@ -167,7 +170,7 @@ class LR:
                     continue
                 nxtsy = pj[1][nxtpos]
                 op = 'S' + str(self.GO(Iid, nxtsy))
-                if nxtsy not in Bigen:
+                if nxtsy not in Upper:
                     self.addAction(Iid, nxtsy, op)
                 else:
                     self.addGoto(Iid, nxtsy, int(op[1:]))
@@ -180,26 +183,148 @@ class LR:
         print("It's a LR(0) grammer.")
         return True
 
-    def Analysis(self, sentence):
-        statstack = [0] # 状态栈
-        systack = ['#'] # 符号栈
-        inpstack = '#' + sentence[::-1]
-        while True:
-            curstate = statstack[-1]
-            cursy = inpstack[-1]
-            if cursy not in self.action[curstate]:
-                return False
-            op = list(self.action[curstate][cursy])[0]
-            if op[0] == 'S':
-                systack.append(inpstack[-1])
-                inpstack = inpstack[:-1]
-                statstack.append(int(op[1:]))
-            elif op[0] == 'r':
-                production = self.production[int(op[1:])]
-                opnum = len(production[1])
-                statstack = statstack[:-opnum]
-                systack = systack[:-opnum]
-                statstack.append(list(self.goto[statstack[-1]][production[0]])[0])
-                systack.append(production[0])
-            elif op == 'acc':
-                return True
+    def addFirst(self, nt, sy):
+        if isinstance(sy, str):
+            sy = set([sy])
+        if nt in self.First:
+            self.First[nt] = self.First[nt].union(sy)
+        else:
+            self.First[nt] = sy
+
+    def getFirst(self, nt):
+        if nt in self.First:
+            return self.First[nt]
+        for pro in self.production:
+            if len(pro[1]) == 0:
+                continue
+            if pro[0] == nt:
+                if pro[1][0] not in Upper:
+                    self.addFirst(nt, pro[1][0])
+                else:
+                    if len(pro[1]) == 1:
+                        self.addFirst(nt, self.getFirst(pro[1]))
+                    else:
+                        l = len(pro[1])
+                        for sy in range(0, l):
+                            if pro[1][sy] == pro[0]:
+                                continue
+                            if sy == l - 1:
+                                self.addFirst(nt, self.getFirst(pro[1]))
+                            elif pro[1][sy] in Upper:
+                                tmp =  self.getFirst(pro[1][sy])
+                                if epsilon in tmp:
+                                    tmp.remove(epsilon)
+                                    self.addFirst(nt, tmp)
+                                else:
+                                    self.addFirst(nt, tmp)
+                                    break
+                            else:
+                                self.addFirst(nt, pro[1][sy])
+                                break
+        return self.First[nt]
+
+    def addFollow(self, nt, sy):
+        if isinstance(sy, str):
+            sy = set([sy])
+        if nt in self.Follow:
+            self.Follow[nt] = self.Follow[nt].union(sy)
+        else:
+            self.Follow[nt] = sy
+
+    def getFollow(self, nt):
+        if nt in self.Follow:
+            return self.Follow[nt]
+        for pro in self.production:
+            pos = pro[1].find(nt)
+            if pos == -1:
+                continue
+            if pos + 1 == len(pro[1]):
+                self.addFollow(nt, self.getFollow(pro[0]))
+                self.addFollow(nt, '#')
+            elif pro[1][pos + 1] not in Upper:
+                self.addFollow(nt, pro[1][pos + 1])
+            else:
+                l = len(pro[1])
+                for i in range(pos + 1, l):
+                    if pro[1][i] in Upper:
+                        tmp = self.getFirst(pro[1][i])
+                        if epsilon in tmp:
+                            tmp.remove(epsilon)
+                            self.addFollow(nt, tmp)
+                            if i == l - 1:
+                                self.addFollow(nt, self.getFollow(pro[0]))
+                        else:
+                            self.addFollow(nt, tmp)
+                            break
+                    else:
+                        self.addFollow(nt, pro[1][i])
+                        break
+        if nt in self.Follow:
+            return self.Follow[nt]
+        else:
+            return set()
+
+    def changeAction(self, stateid, sy, operation):
+        if operation == '':
+            self.action[stateid].pop(sy)
+            return
+        if isinstance(operation, str):
+            operation = set([operation])
+        self.action[stateid][sy] = operation
+
+    def BuildSLR1AnalyseTable(self):
+        problem_set = set()
+        for stat in self.action:
+            for sy in self.action[stat]:
+                if len(self.action[stat][sy]) > 1:
+                    problem_set.add(stat)
+        self.First = dict()
+        self.Follow = dict()
+        movein = set()
+        reduction = []
+        for stat in problem_set:
+            for pj in self.projectSet[stat]:
+                pos = pj[1].find(dot) + 1
+                if pos == len(pj[1]):
+                    reduction.append((self.production_numdict[pj[0]][pj[1]], self.getFollow(pj[0])))
+                else:
+                    if pj[1][pos] in Upper:
+                        movein = movein.union(self.getFirst(pj[1][pos]))
+                    else:
+                        movein.add(pj[1][pos])
+
+            reduction.append(movein)
+            l = len(reduction)
+            for i in range(0, l):
+                for j in range(0, l):
+                    if i == j:
+                        continue
+                    if isinstance(reduction[i], tuple):
+                        followi = reduction[i][1]
+                    else:
+                        followi = reduction[i]
+                    if isinstance(reduction[j], tuple):
+                        followj = reduction[j][1]
+                    else:
+                        followj = reduction[j]
+                    if len(followi.intersection(followj)):
+                        print("It's not a SLR(1) grammer.")
+                        return False
+            reduction.pop()
+
+            for sy in self.dfa.symbol.union(set('#')):
+                if sy in movein:
+                    self.changeAction(stat, sy, 'S' + str(self.GO(stat, sy)))
+                else:
+                    flag = 1
+                    for fol in reduction:
+                        if sy in fol[1]:
+                            self.changeAction(stat, sy, 'r' + str(fol[0]))
+                            flag = 0
+                            break
+                    if flag:
+                        self.changeAction(stat, sy, '')
+            movein = set()
+            reduction = []
+        print("It's a SLR(1) grammer.")
+        return True
