@@ -328,3 +328,125 @@ class LR:
             reduction = []
         print("It's a SLR(1) grammer.")
         return True
+
+    def addLATerminal(self, set_num, project, sy):
+        if isinstance(sy, str):
+            sy = set([sy])
+        if set_num in self.LATerminal and project in self.LATerminal[set_num]:
+            self.LATerminal[set_num][project] = self.LATerminal[set_num][project].union(sy)
+        else:
+            self.LATerminal[set_num][project] = sy
+
+    def getClosureLATerminal(self, fromexp, setnum, searchsy):
+        pst = set()
+        for toexp in self.projects[fromexp]:
+            if toexp.find(dot) == 0:
+                pst.add((fromexp, toexp, tuple(searchsy)))
+                self.addLATerminal(setnum, (fromexp, toexp), searchsy)
+        return pst
+
+    def getProjectSetLATerminal(self, pst, setnum):
+        vis = set()
+        while len(vis) != len(pst):
+            for pj in pst:
+                tpj = (pj[0], pj[1])
+                if pj in vis:
+                    continue
+                vis.add(pj)
+                nxtpos = pj[1].find(dot) + 1
+                if nxtpos == len(pj[1]) or pj[1][nxtpos] not in Upper:
+                    continue
+                nxtposLA = nxtpos + 1
+                if nxtposLA == len(pj[1]):
+                    if setnum not in self.LATerminal or tpj not in self.LATerminal[setnum]:
+                        vis.remove(pj)
+                        continue
+                    sy = self.LATerminal[setnum][tpj]
+                elif pj[1][nxtposLA] not in Upper:
+                    sy = pj[1][nxtposLA]
+                else:
+                    sy = self.getFirst(pj[1][nxtpos])
+                pst = pst.union(self.getClosureLATerminal(pj[1][nxtpos], setnum, sy))
+        return pst
+
+    def BuildDFA(self): # DFA that contains lookahead terminals
+        self.sy2stat = defaultdict(defaultdict)
+        self.projectSet = dict()
+        self.transitions = dict()
+
+        # lookahead terminals 向前搜索符 LATerminal[project_set_num][project] = symbol_set
+        self.LATerminal = defaultdict(defaultdict)
+        self.projectset_num = 0
+        self.dfa.setStart(0)
+        q = [0]
+        self.addLATerminal(0, self.sorted_projects[1], '#')
+        self.projectSet[0] = {(self.sorted_projects[1][0], self.sorted_projects[1][1], ('#',))}
+        while len(q):
+            Iid = q.pop()
+            self.projectSet[Iid] = self.getProjectSetLATerminal(self.projectSet[Iid], Iid)
+            tmpdict = dict()
+            tmp_LATerminal = defaultdict(defaultdict)  # 记录项目间转移时的向前搜索符
+            for pj in self.projectSet[Iid]:
+                nxtpos = pj[1].find(dot) + 1
+                if nxtpos == len(pj[1]):
+                    continue
+                nxtsy = pj[1][nxtpos]
+                nxtpj = pj[1][:nxtpos - 1] + nxtsy + dot + pj[1][nxtpos + 1: ]
+                tpj = (pj[0], pj[1])
+                if nxtsy in tmpdict:
+                    tmpdict[nxtsy].add((pj[0], nxtpj, tuple(self.LATerminal[Iid][tpj])))
+                else:
+                    tmpdict[nxtsy] = set([(pj[0], nxtpj, tuple(self.LATerminal[Iid][tpj]))])
+                if nxtsy in tmp_LATerminal and (pj[0], nxtpj) in tmp_LATerminal[nxtsy]:
+                    tmp_LATerminal[nxtsy][(pj[0], nxtpj)] = tmp_LATerminal[nxtsy][(pj[0], nxtpj)].union(self.LATerminal[Iid][tpj])
+                else:
+                    tmp_LATerminal[nxtsy][(pj[0], nxtpj)] = self.LATerminal[Iid][tpj]
+
+            for nxtsy in tmpdict:
+                tmpdict[nxtsy] = self.getProjectSet(tmpdict[nxtsy])
+                if tmpdict[nxtsy] in self.projectSet.values():
+                    self.sy2stat[Iid][nxtsy] = list(self.projectSet.keys())[list(self.projectSet.values()).index(tmpdict[nxtsy])]
+                    continue
+                nxtIid, flag = self.getNxtStateId(Iid, nxtsy)
+                if flag:
+                    q.append(nxtIid)
+                self.addProjectSet(nxtIid, tmpdict[nxtsy])
+                for sy in tmp_LATerminal:
+                    for pj in tmp_LATerminal[sy]:
+                        self.addLATerminal(nxtIid, pj, tmp_LATerminal[sy][pj])
+                self.dfa.addTransition(Iid, nxtIid, nxtsy)
+
+    def BuildLR1AnalyseTable(self):
+        self.action = dict()
+        self.goto = dict()
+        for Iid in self.projectSet:
+            for pj in self.projectSet[Iid]:
+                tpj = (pj[0], pj[1])
+                nxtpos = pj[1].find(dot) + 1
+                if nxtpos == len(pj[1]):
+                    if self.projects[pj[0]][pj[1]] == 2:
+                        self.addAction(Iid, '#', 'acc')
+                    else:
+                        op = 'r' + str(self.production_numdict[pj[0]][pj[1]])
+                    if self.production_numdict[pj[0]][pj[1]] == 0:
+                        continue
+                    if '#' in self.LATerminal[Iid][tpj]:
+                        self.addAction(Iid, '#', op)
+                    for sy in self.dfa.symbol:
+                        if sy in self.LATerminal[Iid][tpj]:
+                            self.addAction(Iid, sy, op)
+                    continue
+                nxtsy = pj[1][nxtpos]
+                op = 'S' + str(self.GO(Iid, nxtsy))
+                if nxtsy not in Upper:
+                    self.addAction(Iid, nxtsy, op)
+                else:
+                    self.addGoto(Iid, nxtsy, int(op[1:]))
+
+        for stat in self.action:
+            for sy in self.action[stat]:
+                if len(self.action[stat][sy]) > 1:
+                    print("It's not a LR(1) grammer.")
+                    return False
+        print("It's a LR(1) grammer.")
+        return True
