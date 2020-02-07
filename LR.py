@@ -338,14 +338,15 @@ class LR:
             self.LATerminal[set_num][project] = sy
 
     def getClosureLATerminal(self, fromexp, setnum, searchsy):
-        pst = set()
+        pst, simple_pst = set(), set()
         for toexp in self.projects[fromexp]:
             if toexp.find(dot) == 0:
                 pst.add((fromexp, toexp, tuple(searchsy)))
+                simple_pst.add((fromexp, toexp))
                 self.addLATerminal(setnum, (fromexp, toexp), searchsy)
-        return pst
+        return pst, simple_pst
 
-    def getProjectSetLATerminal(self, pst, setnum):
+    def getProjectSetLATerminal(self, pst, simple_pst, setnum):
         vis = set()
         while len(vis) != len(pst):
             for pj in pst:
@@ -366,12 +367,18 @@ class LR:
                     sy = pj[1][nxtposLA]
                 else:
                     sy = self.getFirst(pj[1][nxtpos])
-                pst = pst.union(self.getClosureLATerminal(pj[1][nxtpos], setnum, sy))
-        return pst
+                tmpst, stmpst = self.getClosureLATerminal(pj[1][nxtpos], setnum, sy))
+                pst = pst.union(tmpst)
+                stmpst = stmpst.union(stmpst)
+        return pst, stmpst
 
     def BuildDFA(self): # DFA that contains lookahead terminals
         self.sy2stat = defaultdict(defaultdict)
         self.projectSet = dict()
+
+        # without lookahead terminals, makes it easy to find the set of items with concentric items
+        # 不含向前搜索符，方便之后查找同心集
+        self.simple_projectSet = dict()
         self.transitions = dict()
 
         # lookahead terminals 向前搜索符 LATerminal[project_set_num][project] = symbol_set
@@ -381,9 +388,10 @@ class LR:
         q = [0]
         self.addLATerminal(0, self.sorted_projects[1], '#')
         self.projectSet[0] = {(self.sorted_projects[1][0], self.sorted_projects[1][1], ('#',))}
+        self.simple_projectSet[0] = {(self.sorted_projects[1][0], self.sorted_projects[1][1])}
         while len(q):
             Iid = q.pop()
-            self.projectSet[Iid] = self.getProjectSetLATerminal(self.projectSet[Iid], Iid)
+            self.projectSet[Iid], self.simple_projectSet[Iid] = self.getProjectSetLATerminal(self.projectSet[Iid], self.simple_projectSet[Iid], Iid)
             tmpdict = dict()
             tmp_LATerminal = defaultdict(defaultdict)  # 记录项目间转移时的向前搜索符
             for pj in self.projectSet[Iid]:
@@ -417,8 +425,8 @@ class LR:
                 self.dfa.addTransition(Iid, nxtIid, nxtsy)
 
     def BuildLR1AnalyseTable(self):
-        self.action = dict()
-        self.goto = dict()
+        self.action = defaultdict(defaultdict)
+        self.goto = defaultdict(defaultdict)
         for Iid in self.projectSet:
             for pj in self.projectSet[Iid]:
                 tpj = (pj[0], pj[1])
@@ -450,3 +458,7 @@ class LR:
                     return False
         print("It's a LR(1) grammer.")
         return True
+
+    def BuildLALR1AnalyseTable(self):
+        action = defaultdict(defaultdict)
+        goto = defaultdict(defaultdict)
