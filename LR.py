@@ -460,5 +460,58 @@ class LR:
         return True
 
     def BuildLALR1AnalyseTable(self):
-        action = defaultdict(defaultdict)
-        goto = defaultdict(defaultdict)
+        action, goto = self.action, self.goto
+        self.action, self.goto = defaultdict(defaultdict), defaultdict(defaultdict)
+        concentric, concentric_num = dict(), 0 # 存储同心集
+        f, f_num = dict(), 1  # saving state ID, after merging
+        cnt = len(self.projectSet) + 1
+
+        for i in range(1, cnt):
+            tmp = set(i)
+            for j in range(i + 1, cnt):
+                if j in f:
+                    continue
+                if self.simple_projectSet[i] == self.simple_projectSet[j]:
+                    tmp.add(j)
+                    f[j] = f_num
+            if len(tmp) > 1:
+                concentric_num += 1
+                concentric[concentric_num] = tmp
+            f[i] = f_num
+            f_num += 1
+
+        if concentric_num == 0:
+            print("It's a LALR(1) grammer.")
+            return True
+
+        for Iid in self.projectSet:
+            for pj in in self.projectSet[Iid]:
+                tpj = (pj[0], pj[1])
+                nxtpos = pj[1].find(dot) + 1
+                if nxtpos == len(pj[1]):
+                    if self.projects[pj[0]][pj[1]] == 2:
+                        self.addAction(f[Iid], '#', 'acc')
+                    else:
+                        op = 'r' + str(self.production_numdict[pj[0]][pj[1]])
+                    if self.production_numdict[pj[0]][pj[1]] == 0:
+                        continue
+                    if '#' in self.LATerminal[Iid][tpj]:
+                        self.addAction(f[Iid], '#', op)
+                    for sy in self.dfa.symbol:
+                        if sy in self.LATerminal[Iid][tpj]:
+                            self.addAction(f[Iid], sy, op)
+                    continue
+                nxtsy = pj[1][nxtpos]
+                op = 'S' + f[str(self.GO(Iid, nxtsy))]
+                if nxtsy not in Upper:
+                    self.addAction(f[Iid], nxtsy, op)
+                else:
+                    self.addGoto(f[Iid], nxtsy, int(op[1:]))
+
+        for stat in self.action:
+            for sy in self.action[stat]:
+                if len(self.action[stat][sy]) > 1:
+                    self.action, self.goto = action, goto
+                    print("It's not a LALR(1) grammer.")
+                    return False
+        print("It's a LALR(1) grammer.")
