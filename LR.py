@@ -84,7 +84,7 @@ class LR:
                 pst = pst.union(self.getClosure(pj[1][nxtpos]))
         return pst
 
-     def getNxtStateId(self, fromst, sy): # get next project set id 根据当前项目集编号和获得符号获得下一个项目集编号
+    def getNxtStateId(self, fromst, sy): # get next project set id 根据当前项目集编号和获得符号获得下一个项目集编号
         if fromst not in self.sy2stat or sy not in self.sy2stat[fromst]:
             self.projectset_num += 1
             self.sy2stat[fromst][sy] = self.projectset_num
@@ -124,7 +124,9 @@ class LR:
             for nxtsy in tmpdict:
                 tmpdict[nxtsy] = self.getProjectSet(tmpdict[nxtsy])
                 if tmpdict[nxtsy] in self.projectSet.values():
-                    self.sy2stat[Iid][nxtsy] = list(self.projectSet.keys())[list(self.projectSet.values()).index(tmpdict[nxtsy])]
+                    nxtIid = list(self.projectSet.keys())[list(self.projectSet.values()).index(tmpdict[nxtsy])]
+                    self.dfa.addTransition(Iid, nxtIid, nxtsy)
+                    self.sy2stat[Iid][nxtsy] = nxtIid
                     continue
                 nxtIid, flag = self.getNxtStateId(Iid, nxtsy)
                 if flag:
@@ -367,7 +369,7 @@ class LR:
                     sy = pj[1][nxtposLA]
                 else:
                     sy = self.getFirst(pj[1][nxtpos])
-                tmpst, stmpst = self.getClosureLATerminal(pj[1][nxtpos], setnum, sy))
+                tmpst, stmpst = self.getClosureLATerminal(pj[1][nxtpos], setnum, sy)
                 pst = pst.union(tmpst)
                 stmpst = stmpst.union(stmpst)
         return pst, stmpst
@@ -413,7 +415,9 @@ class LR:
             for nxtsy in tmpdict:
                 tmpdict[nxtsy] = self.getProjectSet(tmpdict[nxtsy])
                 if tmpdict[nxtsy] in self.projectSet.values():
-                    self.sy2stat[Iid][nxtsy] = list(self.projectSet.keys())[list(self.projectSet.values()).index(tmpdict[nxtsy])]
+                    nxtIid = list(self.projectSet.keys())[list(self.projectSet.values()).index(tmpdict[nxtsy])]
+                    self.dfa.addTransition(Iid, nxtIid, nxtsy)
+                    self.sy2stat[Iid][nxtsy] = nxtIid
                     continue
                 nxtIid, flag = self.getNxtStateId(Iid, nxtsy)
                 if flag:
@@ -485,7 +489,7 @@ class LR:
             return True
 
         for Iid in self.projectSet:
-            for pj in in self.projectSet[Iid]:
+            for pj in self.projectSet[Iid]:
                 tpj = (pj[0], pj[1])
                 nxtpos = pj[1].find(dot) + 1
                 if nxtpos == len(pj[1]):
@@ -515,3 +519,27 @@ class LR:
                     print("It's not a LALR(1) grammer.")
                     return False
         print("It's a LALR(1) grammer.")
+
+    def Analysis(self, sentence):
+        statstack = [0]
+        systack = ['#']
+        inpstack = '#' + sentence[::-1]
+        while True:
+            curstate = statstack[-1]
+            cursy = inpstack[-1]
+            if cursy not in self.action[curstate]:
+                return False
+            op = list(self.action[curstate][cursy])[0]
+            if op[0] == 'S':
+                systack.append(inpstack[-1])
+                inpstack = inpstack[:-1]
+                statstack.append(int(op[1:]))
+            elif op[0] == 'r':
+                production = self.production[int(op[1:])]
+                opnum = len(production[1])
+                statstack = statstack[:-opnum]
+                systack = systack[:-opnum]
+                statstack.append(list(self.goto[statstack[-1]][production[0]])[0])
+                systack.append(production[0])
+            elif op == 'acc':
+                return True
