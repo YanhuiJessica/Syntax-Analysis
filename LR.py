@@ -371,8 +371,48 @@ class LR:
                     sy = self.getFirst(pj[1][nxtpos])
                 tmpst, stmpst = self.getClosureLATerminal(pj[1][nxtpos], setnum, sy)
                 pst = pst.union(tmpst)
-                stmpst = stmpst.union(stmpst)
-        return pst, stmpst
+                simple_pst = simple_pst.union(stmpst)
+        return pst, simple_pst
+
+    def addSimpleProjectSet(self, Iid, project):
+        if isinstance(project, tuple):
+            project = set([project])
+        if Iid in self.simple_projectSet:
+            self.simple_projectSet[Iid] = self.simple_projectSet[Iid].union(project)
+        else:
+            self.simple_projectSet[Iid] = project
+
+    def deDuplication(self, pst):
+        # de-duplication and merge
+        # e.g. i: ('F', '·d', ('#',)), j: ('F', '·d', (',',)) -> ('F', '·d', ('#', ','))
+        for pji in pst:
+            for pjj in pst:
+                if pji == pjj:
+                    pj = pji
+                    pst = pst.difference(set([pji]))
+                    pst = pst.union(set([pj]))
+                    continue
+                if pji[0] == pjj[0] and pji[1] == pjj[1]:
+                    pj = (pji[0], pji[1], tuple(set(pji[2]).union(set(pjj[2]))))
+                    pst = pst.difference(set([pji]))
+                    pst = pst.difference(set([pjj]))
+                    pst = pst.union(set([pj]))
+        return pst
+
+    def getTempProjectSetLASearch(self, pst):
+        vis = set()
+        while len(vis) != len(pst):
+            for pj in pst:
+                if pj in vis:
+                    continue
+                vis.add(pj)
+                nxtpos = pj[1].find(dot) + 1
+                if nxtpos == len(pj[1]) or pj[1][nxtpos] not in Upper:
+                    continue
+                tmpst = self.getClosure(pj[1][nxtpos])
+                for tmpj in tmpst:
+                    pst = pst.union(set([(tmpj[0], tmpj[1], pj[2])]))
+        return pst
 
     def BuildDFA(self): # DFA that contains lookahead terminals
         self.sy2stat = defaultdict(defaultdict)
@@ -386,6 +426,7 @@ class LR:
         # lookahead terminals 向前搜索符 LATerminal[project_set_num][project] = symbol_set
         self.LATerminal = defaultdict(defaultdict)
         self.projectset_num = 0
+        self.dfa = FA()
         self.dfa.setStart(0)
         q = [0]
         self.addLATerminal(0, self.sorted_projects[1], '#')
@@ -394,7 +435,8 @@ class LR:
         while len(q):
             Iid = q.pop()
             self.projectSet[Iid], self.simple_projectSet[Iid] = self.getProjectSetLATerminal(self.projectSet[Iid], self.simple_projectSet[Iid], Iid)
-            tmpdict = dict()
+            self.projectSet[Iid] = self.deDuplication(self.projectSet[Iid])
+            tmpdict, simple_tmpdict = dict(), dict()
             tmp_LATerminal = defaultdict(defaultdict)  # 记录项目间转移时的向前搜索符
             for pj in self.projectSet[Iid]:
                 nxtpos = pj[1].find(dot) + 1
@@ -405,15 +447,18 @@ class LR:
                 tpj = (pj[0], pj[1])
                 if nxtsy in tmpdict:
                     tmpdict[nxtsy].add((pj[0], nxtpj, tuple(self.LATerminal[Iid][tpj])))
+                    simple_tmpdict[nxtsy].add((pj[0], nxtpj))
                 else:
                     tmpdict[nxtsy] = set([(pj[0], nxtpj, tuple(self.LATerminal[Iid][tpj]))])
+                    simple_tmpdict[nxtsy] = set([(pj[0], nxtpj)])
                 if nxtsy in tmp_LATerminal and (pj[0], nxtpj) in tmp_LATerminal[nxtsy]:
                     tmp_LATerminal[nxtsy][(pj[0], nxtpj)] = tmp_LATerminal[nxtsy][(pj[0], nxtpj)].union(self.LATerminal[Iid][tpj])
                 else:
                     tmp_LATerminal[nxtsy][(pj[0], nxtpj)] = self.LATerminal[Iid][tpj]
 
             for nxtsy in tmpdict:
-                tmpdict[nxtsy] = self.getProjectSet(tmpdict[nxtsy])
+                tmpdict[nxtsy], simple_tmpdict[nxtsy] = self.getTempProjectSetLASearch(tmpdict[nxtsy]), self.getProjectSet(simple_tmpdict[nxtsy])
+                tmpdict[nxtsy] = self.deDuplication(tmpdict[nxtsy])
                 if tmpdict[nxtsy] in self.projectSet.values():
                     nxtIid = list(self.projectSet.keys())[list(self.projectSet.values()).index(tmpdict[nxtsy])]
                     self.dfa.addTransition(Iid, nxtIid, nxtsy)
@@ -423,6 +468,7 @@ class LR:
                 if flag:
                     q.append(nxtIid)
                 self.addProjectSet(nxtIid, tmpdict[nxtsy])
+                self.addSimpleProjectSet(nxtIid, simple_tmpdict[nxtsy])
                 for sy in tmp_LATerminal:
                     for pj in tmp_LATerminal[sy]:
                         self.addLATerminal(nxtIid, pj, tmp_LATerminal[sy][pj])
