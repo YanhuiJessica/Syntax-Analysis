@@ -66,15 +66,20 @@ class FA:
                 fromstr = 'I' + str(fromstate) + ': '
                 for pj in pst[fromstate]:
                     tmp = ' '
-                    for sy in LATerminal[fromstate][pj]:
-                        tmp += sy + '|'
+                    for sy in LATerminal[fromstate][(pj[0], pj[1])]:
+                        tmp += sy + '/'
                     fromstr += pj[0] + arrow + pj[1] + comma + tmp[:-1] + '\\n'
                 tostr = 'I' + str(state) + ': '
                 for pj in pst[state]:
                     tmp = ' '
-                    for sy in LATerminal[state][pj]:
-                        tmp += sy + '|'
+                    for sy in LATerminal[state][(pj[0], pj[1])]:
+                        tmp += sy + '/'
                     tostr += pj[0] + arrow + pj[1] + comma + tmp[:-1] + '\\n'
                 fa.node('I' + str(fromstate), label = fromstr)
                 fa.node('I' + str(state), label = tostr)
                 fa.edge('I' + str(fromstate), 'I' + str(state), label = list(tostates[state])[0])
+
+        fa.attr('node', shape = 'point')
+        fa.edge('', 'I0')
+
+        fa.view()
