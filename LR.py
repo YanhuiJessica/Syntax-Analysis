@@ -180,9 +180,9 @@ class LR:
         for stat in self.action:
             for sy in self.action[stat]:
                 if len(self.action[stat][sy]) > 1:
-                    print("It's not a LR(0) grammer.")
+                    print("It's not a LR(0) grammar.")
                     return False
-        print("It's a LR(0) grammer.")
+        print("It's a LR(0) grammar.")
         return True
 
     def addFirst(self, nt, sy):
@@ -310,7 +310,7 @@ class LR:
                     else:
                         followj = reduction[j]
                     if len(followi.intersection(followj)):
-                        print("It's not a SLR(1) grammer.")
+                        print("It's not a SLR(1) grammar.")
                         return False
             reduction.pop()
 
@@ -328,7 +328,7 @@ class LR:
                         self.changeAction(stat, sy, '')
             movein = set()
             reduction = []
-        print("It's a SLR(1) grammer.")
+        print("It's a SLR(1) grammar.")
         return True
 
     def addLATerminal(self, set_num, project, sy):
@@ -504,9 +504,9 @@ class LR:
         for stat in self.action:
             for sy in self.action[stat]:
                 if len(self.action[stat][sy]) > 1:
-                    print("It's not a LR(1) grammer.")
+                    print("It's not a LR(1) grammar.")
                     return False
-        print("It's a LR(1) grammer.")
+        print("It's a LR(1) grammar.")
         return True
 
     def BuildLALR1AnalyseTable(self):
@@ -531,7 +531,7 @@ class LR:
             f_num += 1
 
         if concentric_num == 0:
-            print("It's a LALR(1) grammer.")
+            print("It's a LALR(1) grammar.")
             return True
 
         for Iid in self.projectSet:
@@ -562,9 +562,9 @@ class LR:
             for sy in self.action[stat]:
                 if len(self.action[stat][sy]) > 1:
                     self.action, self.goto = action, goto
-                    print("It's not a LALR(1) grammer.")
+                    print("It's not a LALR(1) grammar.")
                     return False
-        print("It's a LALR(1) grammer.")
+        print("It's a LALR(1) grammar.")
 
     def Analysis(self, sentence):
         statstack = [0]
