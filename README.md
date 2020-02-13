@@ -36,3 +36,7 @@
     ```
 - Sample-generated DFA: <br>
 ![sample LR(1) DFA](img/sample_LR(1)_dfa.png)
+
+### Simple Calculator
+
+File folder `calculator` contains a python calculator based on LR parsing.
